@@ -1,33 +1,34 @@
 'use strict';
 
-let glbBuffer = null;
+let pipeGLB = null;
 
-self.addEventListener('install',  e => e.waitUntil(self.skipWaiting()));
-self.addEventListener('activate', e => e.waitUntil(clients.claim()));
+self.addEventListener('install', () => self.skipWaiting());
 
-// メインページから GLB を受け取り、確認応答を返す
-self.addEventListener('message', async e => {
-  if (e.data?.type === 'SET_GLB') {
-    glbBuffer = e.data.buffer;
-    // 送り元クライアントに「受け取った」を返す
-    const all = await clients.matchAll({ includeUncontrolled: true });
-    all.forEach(c => c.postMessage({ type: 'GLB_READY' }));
+self.addEventListener('activate', event => {
+  event.waitUntil(self.clients.claim());
+});
+
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'STORE_GLB') {
+    pipeGLB = event.data.buffer;
+    if (event.ports.length > 0) {
+      event.ports[0].postMessage({ ok: true });
+    }
   }
 });
 
-// /pipe.glb へのリクエストを横取り
-self.addEventListener('fetch', e => {
-  if (new URL(e.request.url).pathname.endsWith('/pipe.glb')) {
-    if (glbBuffer) {
-      e.respondWith(new Response(glbBuffer.slice(0), {
+self.addEventListener('fetch', event => {
+  const { pathname } = new URL(event.request.url);
+  if (pathname.endsWith('/pipe.glb') && pipeGLB) {
+    event.respondWith(
+      new Response(pipeGLB, {
         status: 200,
         headers: {
           'Content-Type': 'model/gltf-binary',
-          'Cache-Control': 'no-store'
-        }
-      }));
-    } else {
-      e.respondWith(new Response('not ready', { status: 503 }));
-    }
+          'Cache-Control': 'no-store, no-cache',
+          'Content-Length': String(pipeGLB.byteLength),
+        },
+      })
+    );
   }
 });
