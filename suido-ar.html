@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>水道配管 AR</title>
+
+  <!-- importmap: Three.js モジュール解決 -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <!-- model-viewer: iOS AR Quick Look / Android WebXR -->
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js"></script>
+
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html,body { width:100%; height:100%; background:#111; overflow:hidden; }
+
+    model-viewer {
+      width:100%; height:100vh;
+      --poster-color:#111;
+      background: radial-gradient(ellipse at center, #1e2a38 0%, #0d1117 100%);
+    }
+
+    /* AR ボタン（AR 対応デバイスのみ表示） */
+    #ar-btn {
+      position:absolute;
+      bottom:28px; left:50%; transform:translateX(-50%);
+      background:linear-gradient(135deg,#0A84FF,#005FCC);
+      color:white; border:none; border-radius:30px;
+      padding:16px 38px;
+      font-family:-apple-system,'Helvetica Neue',sans-serif;
+      font-size:17px; font-weight:700;
+      cursor:pointer; white-space:nowrap;
+      box-shadow:0 6px 28px rgba(10,132,255,.55);
+      -webkit-tap-highlight-color:transparent;
+    }
+
+    /* AR 非対応メッセージ */
+    #no-ar-msg {
+      display:none;
+      position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+      z-index:60;
+      background:rgba(0,0,0,.55);
+      backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+      color:rgba(255,255,255,.6);
+      padding:10px 22px; border-radius:20px;
+      font-family:-apple-system,sans-serif; font-size:13px;
+      white-space:nowrap; pointer-events:none;
+    }
+
+    /* 情報バー */
+    #info-bar {
+      position:fixed; top:16px; left:16px; z-index:60;
+      background:rgba(0,0,0,.58);
+      backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+      color:white; padding:12px 18px; border-radius:16px;
+      font-family:-apple-system,sans-serif; pointer-events:none; line-height:1.75;
+    }
+    #info-bar .row-main { font-size:18px; font-weight:600; }
+    #info-bar .row-sub  { font-size:12px; color:rgba(255,255,255,.5); }
+
+    /* 設定ボタン */
+    #settings-btn {
+      position:fixed; top:16px; right:16px; z-index:60;
+      background:rgba(0,0,0,.58);
+      backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+      color:white; border:none; border-radius:50%;
+      width:52px; height:52px; font-size:22px;
+      cursor:pointer; display:flex; align-items:center; justify-content:center;
+      -webkit-tap-highlight-color:transparent;
+    }
+
+    /* 設定パネル */
+    #settings-panel {
+      position:fixed; top:0; right:-340px; width:320px; height:100%;
+      background:rgba(14,14,18,.97);
+      backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+      z-index:200;
+      transition:right .3s cubic-bezier(.4,0,.2,1);
+      overflow-y:auto; -webkit-overflow-scrolling:touch;
+    }
+    #settings-panel.open { right:0; }
+
+    .ph {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:52px 20px 16px;
+      border-bottom:1px solid rgba(255,255,255,.07);
+    }
+    .ph h2 { font-family:-apple-system,sans-serif; font-size:20px; font-weight:700; color:white; }
+    .close-btn {
+      background:rgba(255,255,255,.1); border:none; color:white;
+      width:34px; height:34px; border-radius:50%; font-size:16px;
+      cursor:pointer; display:flex; align-items:center; justify-content:center;
+      -webkit-tap-highlight-color:transparent;
+    }
+    .pb { padding:22px 20px; }
+    .sg { margin-bottom:20px; }
+    .sg>label {
+      display:block; font-family:-apple-system,sans-serif;
+      font-size:11px; letter-spacing:1px;
+      color:rgba(255,255,255,.4); text-transform:uppercase; margin-bottom:8px;
+    }
+    .ir {
+      display:flex; align-items:stretch;
+      background:rgba(255,255,255,.08); border-radius:12px; overflow:hidden;
+      border:1px solid rgba(255,255,255,.05);
+    }
+    .ir input {
+      flex:1; padding:13px 14px; background:none; border:none;
+      color:white; font-size:24px; font-weight:300;
+      font-family:-apple-system,sans-serif; outline:none; -webkit-appearance:none;
+    }
+    .ir .ul {
+      display:flex; align-items:center; padding:0 14px 0 2px;
+      color:rgba(255,255,255,.3); font-family:-apple-system,sans-serif; font-size:15px;
+    }
+    #apply-btn {
+      width:100%; padding:16px; background:#0A84FF; color:white; border:none;
+      border-radius:14px; font-family:-apple-system,sans-serif;
+      font-size:17px; font-weight:700; cursor:pointer; margin-top:6px;
+      -webkit-tap-highlight-color:transparent;
+    }
+    #apply-btn:active { background:#0060C7; }
+    .divider { height:1px; background:rgba(255,255,255,.07); margin:22px 0; }
+    .hint-text {
+      font-family:-apple-system,sans-serif;
+      font-size:13px; color:rgba(255,255,255,.3); line-height:2.0;
+    }
+    .hint-text strong { color:rgba(255,255,255,.5); font-weight:500; }
+
+    /* ローディング */
+    #loading {
+      position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+      z-index:80; color:rgba(255,255,255,.6);
+      font-family:-apple-system,sans-serif; font-size:15px; text-align:center;
+    }
+    .spinner {
+      width:36px; height:36px; margin:0 auto 14px;
+      border:3px solid rgba(255,255,255,.15);
+      border-top-color:rgba(255,255,255,.7);
+      border-radius:50%; animation:spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* エラー表示 */
+    #error-overlay {
+      display:none;
+      position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+      z-index:90; max-width:320px; width:90%;
+      background:rgba(20,10,10,.95); border:1px solid rgba(255,80,80,.3);
+      border-radius:16px; padding:28px 24px; text-align:center;
+      font-family:-apple-system,sans-serif; color:white;
+    }
+    #error-overlay .icon { font-size:32px; margin-bottom:12px; }
+    #error-overlay .msg  { font-size:14px; color:rgba(255,200,200,.85); line-height:1.7; word-break:break-all; }
+    #error-overlay button {
+      margin-top:18px; padding:10px 28px;
+      background:#0A84FF; color:white; border:none;
+      border-radius:10px; font-size:15px; cursor:pointer;
+    }
+  </style>
+</head>
+<body>
+
+<model-viewer id="viewer"
+  ar
+  ar-modes="webxr scene-viewer quick-look"
+  ar-scale="fixed"
+  ar-placement="floor"
+  camera-controls
+  touch-action="pan-y"
+  auto-rotate
+  auto-rotate-delay="2500"
+  rotation-per-second="20deg"
+  shadow-intensity="1"
+  shadow-softness="0.7"
+  environment-image="neutral"
+  exposure="1.1"
+  camera-orbit="35deg 72deg auto"
+>
+  <button slot="ar-button" id="ar-btn">📐 ARで実寸確認</button>
+</model-viewer>
+
+<div id="no-ar-msg">このデバイスは AR に対応していません（iPhone / iPad / Android でお試しください）</div>
+
+<div id="info-bar">
+  <div class="row-main">
+    外径 <span id="io">50</span> mm ／ 内径 <span id="ii">40</span> mm
+  </div>
+  <div class="row-sub">
+    肉厚 <span id="iw">5.0</span> mm　長さ <span id="il">300</span> mm
+  </div>
+</div>
+
+<button id="settings-btn">⚙</button>
+
+<div id="settings-panel">
+  <div class="ph">
+    <h2>配管設定</h2>
+    <button class="close-btn" id="close-settings">✕</button>
+  </div>
+  <div class="pb">
+    <div class="sg">
+      <label>外径（outer diameter）</label>
+      <div class="ir">
+        <input type="number" id="ip-outer"  value="50"  min="1" max="5000" inputmode="decimal">
+        <span class="ul">mm</span>
+      </div>
+    </div>
+    <div class="sg">
+      <label>内径（inner diameter）</label>
+      <div class="ir">
+        <input type="number" id="ip-inner"  value="40"  min="1" max="5000" inputmode="decimal">
+        <span class="ul">mm</span>
+      </div>
+    </div>
+    <div class="sg">
+      <label>長さ（length）</label>
+      <div class="ir">
+        <input type="number" id="ip-length" value="300" min="10" max="10000" inputmode="decimal">
+        <span class="ul">mm</span>
+      </div>
+    </div>
+    <button id="apply-btn">適　用</button>
+
+    <div class="divider"></div>
+    <div class="hint-text">
+      <strong>AR の使い方（iOS / Android）</strong><br>
+      ① 「ARで実寸確認」をタップ<br>
+      ② カメラを床や地面に向ける<br>
+      ③ 白い輪が出たらタップして配置<br>
+      ④ 実際の大きさで表示されます
+    </div>
+    <div class="divider"></div>
+    <div class="hint-text">
+      <strong>3D プレビュー操作</strong><br>
+      　1本指ドラッグ … 回転<br>
+      　ピンチ … 拡大縮小<br>
+    </div>
+    <div class="divider"></div>
+    <div class="hint-text" style="color:rgba(255,255,255,.2)">
+      ※ AR 機能は iOS 12 以降の Safari、<br>
+      　または Android の Chrome でご利用いただけます。<br>
+      　HTTPS 接続が必要です。
+    </div>
+  </div>
+</div>
+
+<div id="loading">
+  <div class="spinner"></div>
+  配管モデルを生成中...
+</div>
+
+<div id="error-overlay">
+  <div class="icon">⚠️</div>
+  <div class="msg" id="error-msg"></div>
+  <button onclick="location.reload()">再読み込み</button>
+</div>
+
+<script type="module">
+// ── エラー表示ユーティリティ ──────────────────────────────────────────
+function showError(msg) {
+  console.error('[suido-ar]', msg);
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('error-msg').textContent = msg;
+  document.getElementById('error-overlay').style.display = 'block';
+}
+
+function hideLoading() {
+  document.getElementById('loading').style.display = 'none';
+}
+
+// モジュール読み込みエラーも拾う
+window.addEventListener('unhandledrejection', e => {
+  showError('非同期エラー: ' + (e.reason?.message ?? String(e.reason)));
+});
+
+// ── Three.js / GLTFExporter ──────────────────────────────────────────
+let THREE, GLTFExporter;
+try {
+  const threeModule    = await import('three');
+  const exporterModule = await import('three/addons/exporters/GLTFExporter.js');
+  THREE         = threeModule;
+  GLTFExporter  = exporterModule.GLTFExporter;
+} catch (e) {
+  showError('ライブラリ読み込み失敗。インターネット接続を確認してください。\n' + e.message);
+  throw e;
+}
+
+// ── 配管ジオメトリ生成 ────────────────────────────────────────────────
+//  model-viewer は 1 unit = 1 m なので mm → m 変換
+function buildPipe(outerMM, innerMM, lengthMM) {
+  const oR  = outerMM  / 2 / 1000;
+  const iR  = innerMM  / 2 / 1000;
+  const len = lengthMM     / 1000;
+  const SEG = 64;
+
+  const group = new THREE.Group();
+
+  const matGrayF = new THREE.MeshStandardMaterial({
+    color:0x909090, metalness:0.35, roughness:0.50, side:THREE.FrontSide
+  });
+  const matGrayD = new THREE.MeshStandardMaterial({
+    color:0x909090, metalness:0.35, roughness:0.50, side:THREE.DoubleSide
+  });
+  const matBlue  = new THREE.MeshStandardMaterial({
+    color:0x7EC8E3, metalness:0.05, roughness:0.55, side:THREE.DoubleSide
+  });
+
+  // 外側円筒面（灰色）
+  group.add(new THREE.Mesh(
+    new THREE.CylinderGeometry(oR, oR, len, SEG, 1, true), matGrayF
+  ));
+  // 内側円筒面（水色）
+  group.add(new THREE.Mesh(
+    new THREE.CylinderGeometry(iR, iR, len, SEG, 1, true), matBlue
+  ));
+
+  // 両端の断面（肉厚リング ＋ 水色内部円）
+  for (const sign of [-1, +1]) {
+    const y = sign * len / 2;
+
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(iR, oR, SEG), matGrayD.clone()
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = y;
+    group.add(ring);
+
+    const disk = new THREE.Mesh(
+      new THREE.CircleGeometry(iR, SEG), matBlue.clone()
+    );
+    disk.rotation.x = -Math.PI / 2;
+    disk.position.y = y;
+    group.add(disk);
+  }
+
+  // 横向き（X 軸方向）＋ 床に接するよう Y オフセット
+  group.rotation.z = Math.PI / 2;
+  group.position.y = oR;
+
+  return group;
+}
+
+// ── GLB エクスポート ──────────────────────────────────────────────────
+function exportGLB(group) {
+  return new Promise((resolve, reject) => {
+    const exporter = new GLTFExporter();
+    exporter.parse(
+      group,
+      data => resolve(data),
+      err  => reject(new Error('GLTFExporter: ' + (err?.message ?? String(err)))),
+      { binary: true }
+    );
+  });
+}
+
+// ── model-viewer に GLB を渡す ────────────────────────────────────────
+let prevBlobUrl = null;
+
+async function updateViewer(outer, inner, length) {
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('error-overlay').style.display = 'none';
+
+  try {
+    // model-viewer カスタム要素の準備を待つ
+    await customElements.whenDefined('model-viewer');
+    const viewer = document.getElementById('viewer');
+
+    const group = buildPipe(outer, inner, length);
+    const glb   = await exportGLB(group);
+
+    // Three.js リソース解放
+    group.traverse(o => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) {
+        [].concat(o.material).forEach(m => m.dispose());
+      }
+    });
+
+    // Blob URL 生成
+    const blob = new Blob([glb], { type:'model/gltf-binary' });
+    const url  = URL.createObjectURL(blob);
+    if (prevBlobUrl) URL.revokeObjectURL(prevBlobUrl);
+    prevBlobUrl = url;
+
+    // model-viewer に読み込ませる（load/error どちらかを待つ）
+    await new Promise((resolve, reject) => {
+      const onLoad  = () => { viewer.removeEventListener('error', onError); resolve(); };
+      const onError = (e) => { viewer.removeEventListener('load', onLoad); reject(new Error('モデル読み込みエラー: ' + (e.detail?.sourceError ?? ''))); };
+      viewer.addEventListener('load',  onLoad,  { once:true });
+      viewer.addEventListener('error', onError, { once:true });
+      viewer.src = url;
+    });
+
+    // AR 対応チェック
+    if (!viewer.canActivateAR) {
+      document.getElementById('no-ar-msg').style.display = 'block';
+    }
+
+  } catch (e) {
+    showError(e.message || String(e));
+    return;
+  }
+
+  hideLoading();
+}
+
+// ── 情報バー更新 ──────────────────────────────────────────────────────
+function updateInfoBar(outer, inner, length) {
+  document.getElementById('io').textContent = outer;
+  document.getElementById('ii').textContent = inner;
+  document.getElementById('iw').textContent = ((outer - inner) / 2).toFixed(1);
+  document.getElementById('il').textContent = length;
+}
+
+// ── 設定パネル ────────────────────────────────────────────────────────
+document.getElementById('settings-btn').addEventListener('click', () => {
+  document.getElementById('settings-panel').classList.add('open');
+});
+document.getElementById('close-settings').addEventListener('click', () => {
+  document.getElementById('settings-panel').classList.remove('open');
+});
+
+document.getElementById('apply-btn').addEventListener('click', async () => {
+  const outer  = parseFloat(document.getElementById('ip-outer').value)  || 0;
+  const inner  = parseFloat(document.getElementById('ip-inner').value)  || 0;
+  const length = parseFloat(document.getElementById('ip-length').value) || 0;
+
+  if (outer <= 0 || inner <= 0 || length <= 0) { alert('正の数を入力してください。'); return; }
+  if (inner >= outer)                            { alert('内径は外径より小さい値にしてください。'); return; }
+
+  document.getElementById('settings-panel').classList.remove('open');
+  updateInfoBar(outer, inner, length);
+  await updateViewer(outer, inner, length);
+});
+
+// ── 初期化 ────────────────────────────────────────────────────────────
+updateInfoBar(50, 40, 300);
+await updateViewer(50, 40, 300);
+</script>
+</body>
+</html>
