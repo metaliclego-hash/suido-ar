@@ -301,7 +301,7 @@ function buildPipe(outerMM, innerMM, lenMM) {
   const SEG = 72;
   const g   = new THREE.Group();
 
-  const mGF = new THREE.MeshPhongMaterial({ color:0x909090, shininess:110, side:THREE.DoubleSide });
+  const mGF = new THREE.MeshPhongMaterial({ color:0x909090, shininess:110, side:THREE.FrontSide });
   const mGD = new THREE.MeshPhongMaterial({ color:0x909090, shininess:110, side:THREE.DoubleSide });
   const mBD = new THREE.MeshPhongMaterial({ color:0x7EC8E3, shininess:80,  side:THREE.DoubleSide });
 
@@ -347,24 +347,9 @@ function buildARPipe(outerMM, innerMM, lenMM) {
   const mGF = new THREE.MeshStandardMaterial({ color:0x909090, metalness:0.35, roughness:0.5, side:THREE.FrontSide });
   const mGD = new THREE.MeshStandardMaterial({ color:0x909090, metalness:0.35, roughness:0.5, side:THREE.DoubleSide });
   const mBD = new THREE.MeshStandardMaterial({ color:0x7EC8E3, metalness:0.05, roughness:0.55, side:THREE.DoubleSide });
-  // 内側面専用（法線を内向きに反転 + FrontSide）→ 外から見えず、管内から青く見える
-  const mBI = new THREE.MeshStandardMaterial({ color:0x7EC8E3, metalness:0.05, roughness:0.55, side:THREE.FrontSide });
 
   g.add(new THREE.Mesh(new THREE.CylinderGeometry(oR,oR,len,SEG,1,true), mGF));
-
-  // 内筒: 法線・インデックス両方を反転して内側面をフロントとしてエクスポート
-  const innerGeom = new THREE.CylinderGeometry(iR,iR,len,SEG,1,true);
-  const iNorm = innerGeom.attributes.normal;
-  for (let n = 0; n < iNorm.count; n++) {
-    iNorm.setXYZ(n, -iNorm.getX(n), -iNorm.getY(n), -iNorm.getZ(n));
-  }
-  iNorm.needsUpdate = true;
-  const iIdx = innerGeom.index;
-  for (let k = 0; k < iIdx.count; k += 3) {
-    const tmp = iIdx.getX(k+1); iIdx.setX(k+1, iIdx.getX(k+2)); iIdx.setX(k+2, tmp);
-  }
-  iIdx.needsUpdate = true;
-  g.add(new THREE.Mesh(innerGeom, mBI));
+  g.add(new THREE.Mesh(new THREE.CylinderGeometry(iR,iR,len,SEG,1,true), mBD));
 
   for (const s of [-1, 1]) {
     const y = s * len / 2;
