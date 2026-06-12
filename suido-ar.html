@@ -344,9 +344,9 @@ function buildARPipe(outerMM, innerMM, lenMM) {
   const SEG = 72;
   const g   = new THREE.Group();
 
-  const mGF = new THREE.MeshStandardMaterial({ color:0x909090, metalness:0.35, roughness:0.5, side:THREE.DoubleSide });
+  const mGF = new THREE.MeshStandardMaterial({ color:0x909090, metalness:0.35, roughness:0.5, side:THREE.FrontSide });
   const mGD = new THREE.MeshStandardMaterial({ color:0x909090, metalness:0.35, roughness:0.5, side:THREE.DoubleSide });
-  const mBD = new THREE.MeshStandardMaterial({ color:0x7EC8E3, metalness:0.05, roughness:0.55, side:THREE.DoubleSide });
+  const mBD = new THREE.MeshStandardMaterial({ color:0x7EC8E3, metalness:0.05, roughness:0.55, side:THREE.BackSide });
 
   g.add(new THREE.Mesh(new THREE.CylinderGeometry(oR,oR,len,SEG,1,true), mGF));
   g.add(new THREE.Mesh(new THREE.CylinderGeometry(iR,iR,len,SEG,1,true), mBD));
