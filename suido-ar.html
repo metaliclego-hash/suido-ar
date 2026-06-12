@@ -301,7 +301,7 @@ function buildPipe(outerMM, innerMM, lenMM) {
   const SEG = 72;
   const g   = new THREE.Group();
 
-  const mGF = new THREE.MeshPhongMaterial({ color:0x909090, shininess:110, side:THREE.FrontSide });
+  const mGF = new THREE.MeshPhongMaterial({ color:0x909090, shininess:110, side:THREE.DoubleSide });
   const mGD = new THREE.MeshPhongMaterial({ color:0x909090, shininess:110, side:THREE.DoubleSide });
   const mBD = new THREE.MeshPhongMaterial({ color:0x7EC8E3, shininess:80,  side:THREE.DoubleSide });
 
@@ -344,7 +344,7 @@ function buildARPipe(outerMM, innerMM, lenMM) {
   const SEG = 72;
   const g   = new THREE.Group();
 
-  const mGF = new THREE.MeshStandardMaterial({ color:0x909090, metalness:0.35, roughness:0.5, side:THREE.FrontSide });
+  const mGF = new THREE.MeshStandardMaterial({ color:0x909090, metalness:0.35, roughness:0.5, side:THREE.DoubleSide });
   const mGD = new THREE.MeshStandardMaterial({ color:0x909090, metalness:0.35, roughness:0.5, side:THREE.DoubleSide });
   const mBD = new THREE.MeshStandardMaterial({ color:0x7EC8E3, metalness:0.05, roughness:0.55, side:THREE.DoubleSide });
 
