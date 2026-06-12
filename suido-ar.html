@@ -105,23 +105,8 @@
     }
     #hint.fade { opacity:0; }
 
-    /* ── AR 準備中オーバーレイ ── */
-    #ar-preparing {
-      display:none;
-      position:fixed; inset:0; z-index:60;
-      background:rgba(0,0,0,.6);
-      align-items:center; justify-content:center; flex-direction:column;
-      gap:16px; color:#fff;
-      font-family:-apple-system,sans-serif; font-size:16px;
-    }
-    #ar-preparing.show { display:flex; }
-    .spin {
-      width:40px; height:40px;
-      border:3px solid rgba(255,255,255,.2);
-      border-top-color:#fff;
-      border-radius:50%; animation:spin .8s linear infinite;
-    }
-    @keyframes spin { to { transform:rotate(360deg); } }
+    /* AR ボタンが準備中のときは半透明 */
+    #ar-btn[style*="0.4"] { cursor:wait; }
 
     /* ── 設定パネル ── */
     #panel {
@@ -175,10 +160,11 @@
     .nt { font-family:-apple-system,sans-serif; font-size:13px; color:rgba(255,255,255,.3); line-height:2.0; }
     .nt strong { color:rgba(255,255,255,.5); font-weight:500; }
 
-    /* ── AR 専用 model-viewer（画面外） ── */
+    /* ── AR 専用 model-viewer（ほぼ不可視だが描画される） ── */
     #ar-mv {
-      position:fixed; left:-9999px; top:-9999px;
-      width:1px; height:1px; overflow:hidden;
+      position:fixed; bottom:0; right:0;
+      width:2px; height:2px; overflow:hidden;
+      opacity:0.01; pointer-events:none; z-index:-1;
     }
   </style>
 </head>
@@ -203,10 +189,7 @@
 <button id="ar-btn">📐 ARで実寸配置</button>
 <div id="no-ar-msg">3Dプレビューモード（AR は Safari / Android Chrome で対応）</div>
 
-<!-- AR 準備中 -->
-<div id="ar-preparing"><div class="spin"></div>AR を準備中...</div>
-
-<!-- AR 専用の model-viewer（画面外に隠す） -->
+<!-- AR 専用の model-viewer（ほぼ不可視） -->
 <model-viewer id="ar-mv"
   ar
   ar-modes="webxr scene-viewer quick-look"
@@ -440,29 +423,35 @@ async function loadARModel(outerMM, innerMM, lenMM) {
   const mv = document.getElementById('ar-mv');
 
   // SW が使えるなら実 URL で渡す（iOS AR Quick Look が確実に動く）
+  // model-viewer に src をセットして load を待つ（最大8秒）
+  function setAndWait(src) {
+    return new Promise(resolve => {
+      const done = () => {
+        mv.removeEventListener('load',  onLoad);
+        mv.removeEventListener('error', onErr);
+        clearTimeout(timer);
+        resolve();
+      };
+      const onLoad = done;
+      const onErr  = done;
+      const timer  = setTimeout(done, 8000); // タイムアウトでも続行
+      mv.addEventListener('load',  onLoad, { once: true });
+      mv.addEventListener('error', onErr,  { once: true });
+      mv.src = src;
+    });
+  }
+
   const swOK = await sendGLBtoSW(glb);
   if (swOK) {
     mvVersion++;
-    await new Promise((resolve, reject) => {
-      const onLoad = () => { mv.removeEventListener('error', onErr); resolve(); };
-      const onErr  = () => { mv.removeEventListener('load',  onLoad); reject(new Error('モデル読込エラー')); };
-      mv.addEventListener('load',  onLoad, { once: true });
-      mv.addEventListener('error', onErr,  { once: true });
-      mv.src = `./pipe.glb?v=${mvVersion}`;
-    });
+    await setAndWait(`./pipe.glb?v=${mvVersion}`);
   } else {
     // フォールバック: blob URL
     const blob = new Blob([glb], { type: 'model/gltf-binary' });
     const url  = URL.createObjectURL(blob);
     if (prevBlobUrl) URL.revokeObjectURL(prevBlobUrl);
     prevBlobUrl = url;
-    await new Promise((resolve, reject) => {
-      const onLoad = () => { mv.removeEventListener('error', onErr); resolve(); };
-      const onErr  = () => { mv.removeEventListener('load',  onLoad); reject(new Error('モデル読込エラー')); };
-      mv.addEventListener('load',  onLoad, { once: true });
-      mv.addEventListener('error', onErr,  { once: true });
-      mv.src = url;
-    });
+    await setAndWait(url);
   }
 
   return mv.canActivateAR;
@@ -566,7 +555,7 @@ document.getElementById('ar-btn').addEventListener('click', async () => {
 });
 
 // 設定適用
-document.getElementById('apply').addEventListener('click', async () => {
+document.getElementById('apply').addEventListener('click', () => {
   const o = parseFloat(document.getElementById('in-o').value) || 0;
   const i = parseFloat(document.getElementById('in-i').value) || 0;
   const l = parseFloat(document.getElementById('in-l').value) || 0;
@@ -575,7 +564,7 @@ document.getElementById('apply').addEventListener('click', async () => {
 
   document.getElementById('panel').classList.remove('open');
 
-  // プレビュー更新
+  // ① プレビューをすぐに更新（await しない）
   const pos  = pipeGroup ? pipeGroup.position.clone() : new THREE.Vector3();
   const rotZ = pipeGroup ? pipeGroup.rotation.z : 0;
   buildPipe(o, i, l);
@@ -584,17 +573,24 @@ document.getElementById('apply').addEventListener('click', async () => {
   pipeGroup.scale.setScalar(pipeScale);
   updateInfo(o, i, l);
 
-  // AR モデル再生成
-  document.getElementById('ar-preparing').classList.add('show');
+  // ② AR モデルはバックグラウンドで更新（UIをブロックしない）
+  refreshARModel(o, i, l);
+});
+
+async function refreshARModel(o, i, l) {
+  const btn = document.getElementById('ar-btn');
+  btn.style.opacity = '0.4';
+  btn.style.pointerEvents = 'none';
   try {
     const canAR = await loadARModel(o, i, l);
-    document.getElementById('ar-btn').style.display   = canAR ? 'block' : 'none';
+    document.getElementById('ar-btn').style.display    = canAR ? 'block' : 'none';
     document.getElementById('no-ar-msg').style.display = canAR ? 'none'  : 'block';
   } catch(e) {
     console.warn('AR モデル更新失敗:', e.message);
   }
-  document.getElementById('ar-preparing').classList.remove('show');
-});
+  btn.style.opacity = '1';
+  btn.style.pointerEvents = 'auto';
+}
 
 setTimeout(() => document.getElementById('hint').classList.add('fade'), 5000);
 
@@ -604,18 +600,8 @@ setTimeout(() => document.getElementById('hint').classList.add('fade'), 5000);
 buildPipe(50, 40, 300);
 updateInfo(50, 40, 300);
 
-// SW と AR モデルの準備（バックグラウンドで実行）
-await setupSW();
-document.getElementById('ar-preparing').classList.add('show');
-try {
-  const canAR = await loadARModel(50, 40, 300);
-  document.getElementById('ar-btn').style.display    = canAR ? 'block' : 'none';
-  document.getElementById('no-ar-msg').style.display = canAR ? 'none'  : 'block';
-} catch(e) {
-  console.warn('AR 初期化失敗:', e.message);
-  document.getElementById('no-ar-msg').style.display = 'block';
-}
-document.getElementById('ar-preparing').classList.remove('show');
+// SW と AR モデルの準備（バックグラウンドで実行・UIをブロックしない）
+setupSW().then(() => refreshARModel(50, 40, 300));
 </script>
 </body>
 </html>
